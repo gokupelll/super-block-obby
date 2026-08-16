@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SUPER BLOCK OBBY</title>
+
+<style>
+*{box-sizing:border-box;user-select:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,sans-serif;touch-action:none}
+body{background:#67c9ff}
+canvas{display:block;width:100vw;height:100vh}
+
+#hud{
+ position:fixed;
+ left:15px;
+ top:15px;
+ z-index:10;
+ color:white;
+ font-weight:bold;
+ text-shadow:2px 2px 4px #000;
+ font-size:19px;
+ line-height:1.5
+}
+
+#title{
+ font-size:28px;
+ color:#fff
+}
+
+#topRight{
+ position:fixed;
+ right:15px;
+ top:15px;
+ z-index:10;
+ display:flex;
+ gap:8px
+}
+
+button{
+ border:0;
+ border-radius:10px;
+ padding:10px 14px;
+ font-weight:bold;
+ cursor:pointer;
+ box-shadow:0 3px 8px #0005
+}
+
+#message{
+ position:fixed;
+ left:50%;
+ top:50%;
+ transform:translate(-50%,-50%);
+ z-index:30;
+ color:white;
+ text-align:center;
+ text-shadow:3px 3px 8px #000;
+ display:none
+}
+
+#message h1{
+ font-size:55px;
+ margin:0 0 10px
+}
+
+#message p{
+ font-size:25px
+}
+
+#restart{
+ display:none;
+ position:fixed;
+ z-index:31;
+ left:50%;
+ top:68%;
+ transform:translateX(-50%);
+ font-size:20px
+}
+
+#controls{
+ position:fixed;
+ left:50%;
+ bottom:15px;
+ transform:translateX(-50%);
+ background:#0009;
+ color:white;
+ padding:10px 18px;
+ border-radius:12px;
+ z-index:10;
+ text-align:center
+}
+
+#levelBanner{
+ position:fixed;
+ top:100px;
+ left:50%;
+ transform:translateX(-50%);
+ color:white;
+ font-size:30px;
+ font-weight:bold;
+ text-shadow:3px 3px 5px #000;
+ z-index:15;
+ opacity:0;
+ transition:opacity .3s
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+ <div id="title">🏃 SUPER BLOCK OBBY</div>
+ <div>🏁 Nivel: <span id="level">1</span> / 10</div>
+ <div>⭐ Monedas: <span id="coins">0</span></div>
+ <div>❤️ Vidas: <span id="lives">3</span></div>
+ <div>⏱️ Tiempo: <span id="time">0</span>s</div>
+</div>
+
+<div id="topRight">
+ <button id="full">⛶ Pantalla completa</button>
+ <button id="restartTop">🔄 Reiniciar</button>
+</div>
+
+<div id="controls">
+ A / D = moverte &nbsp; | &nbsp; ESPACIO = saltar
+</div>
+
+<div id="levelBanner"></div>
+
+
+<div id="mobileControls" aria-label="Controles táctiles">
+  <button class="touchBtn" id="touchLeft" aria-label="Mover a la izquierda">◀</button>
+  <button class="touchBtn" id="touchRight" aria-label="Mover a la derecha">▶</button>
+  <button class="touchBtn" id="touchJump" aria-label="Saltar">SALTAR</button>
+</div>
+
+<div id="message">
+ <h1>🏆 ¡GANASTE!</h1>
+ <p id="finalText"></p>
+</div>
+
+<button id="restart">🔄 Jugar otra vez</button>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+ canvas.width=innerWidth;
+ canvas.height=innerHeight;
+}
+addEventListener("resize",resize);
+resize();
+
+/* =========================
+   VARIABLES
+========================= */
+
+const GRAVITY=.58;
+const SPEED=5;
+const JUMP=-12;
+
+let keys={};
+let cameraX=0;
+let cameraY=0;
+
+let currentLevel=1;
+let coins=0;
+let lives=3;
+let totalTime=0;
+let gameOver=false;
+let won=false;
+
+let lastTime=performance.now();
+
+/* =========================
+   JUGADOR
+========================= */
+
+const player={
+ x:80,
+ y:300,
+ w:34,
+ h:54,
+ vx:0,
+ vy:0,
+ grounded:false,
+ jumpLock:false
+};
+
+/* =========================
+   NIVEL
+========================= */
+
+let platforms=[];
+let lava=[];
+let movingPlatforms=[];
+let bouncePads=[];
+let coinsList=[];
+let checkpoints=[];
+let goal=null;
+
+/* =========================
+   DATOS DE LOS 10 NIVELES
+========================= */
+
+const levels=[
+
+/* 1 */
+[
+ [0,450,350,40],
+ [430,400,220,40],
+ [720,350,220,40],
+ [1010,400,260,40]
+],
+
+/* 2 */
+[
+ [0,450,250,40],
+ [330,390,180,40],
+ [590,330,180,40],
+ [850,270,180,40],
+ [1130,350,300,40]
+],
+
+/* 3 */
+[
+ [0,450,220,40],
+ [300,370,150,40],
+ [540,450,160,40],
+ [770,340,150,40],
+ [1000,250,180,40],
+ [1280,350,300,40]
+],
+
+/* 4 */
+[
+ [0,450,300,40],
+ [380,360,130,40],
+ [600,300,130,40],
+ [820,390,150,40],
+ [1060,300,150,40],
+ [1300,220,200,40]
+],
+
+/* 5 */
+[
+ [0,450,220,40],
+ [320,370,130,40],
+ [550,290,120,40],
+ [770,360,120,40],
+ [1000,270,120,40],
+ [1230,180,250,40]
+],
+
+/* 6 */
+[
+ [0,450,250,40],
+ [350,380,120,40],
+ [600,310,120,40],
+ [850,240,120,40],
+ [1100,330,140,40],
+ [1360,220,240,40]
+],
+
+/* 7 */
+[
+ [0,450,200,40],
+ [300,350,110,40],
+ [500,250,110,40],
+ [700,350,110,40],
+ [900,220,110,40],
+ [1120,310,110,40],
+ [1340,200,260,40]
+],
+
+/* 8 */
+[
+ [0,450,180,40],
+ [280,380,100,40],
+ [470,300,100,40],
+ [660,220,100,40],
+ [850,320,100,40],
+ [1040,240,100,40],
+ [1230,160,100,40],
+ [1430,260,250,40]
+],
+
+/* 9 */
+[
+ [0,450,180,40],
+ [270,350,100,40],
+ [450,250,100,40],
+ [630,350,100,40],
+ [810,230,100,40],
+ [990,330,100,40],
+ [1170,210,100,40],
+ [1350,290,100,40],
+ [1530,170,300,40]
+],
+
+/* 10 */
+[
+ [0,450,180,40],
+ [260,360,90,40],
+ [430,270,90,40],
+ [600,180,90,40],
+ [770,290,90,40],
+ [940,200,90,40],
+ [1110,300,90,40],
+ [1280,210,90,40],
+ [1450,120,100,40],
+ [1640,230,350,40]
+]
+
+];
+
+/* =========================
+   CREAR NIVEL
+========================= */
+
+function buildLevel(){
+
+ platforms=[];
+ lava=[];
+ movingPlatforms=[];
+ bouncePads=[];
+ coinsList=[];
+ checkpoints=[];
+
+ const data=levels[currentLevel-1];
+
+ for(const p of data){
+   platforms.push({
+     x:p[0],
+     y:p[1],
+     w:p[2],
+     h:p[3]
+   });
+ }
+
+ /* Lava entre plataformas */
+
+ for(let i=0;i<platforms.length-1;i++){
+
+   const a=platforms[i];
+   const b=platforms[i+1];
+
+   const gap=b.x-(a.x+a.w);
+
+   if(gap>10){
+     lava.push({
+       x:a.x+a.w,
+       y:500,
+       w:gap,
+       h:80
+     });
+   }
+ }
+
+ /* Plataformas móviles */
+
+ if(currentLevel>=3){
+
+   for(let i=1;i<platforms.length-1;i+=3){
+
+     const p=platforms[i];
+
+     movingPlatforms.push({
+       x:p.x+20,
+       y:p.y-80,
+       w:90,
+       h:25,
+       startX:p.x-30,
+       endX:p.x+130,
+       speed:1.5,
+       dir:1
+     });
+   }
+ }
+
+ /* Trampolines */
+
+ if(currentLevel>=2){
+
+   for(let i=0;i<platforms.length;i+=3){
+
+     const p=platforms[i];
+
+     bouncePads.push({
+       x:p.x+p.w/2-22,
+       y:p.y-12,
+       w:44,
+       h:12
+     });
+   }
+ }
+
+ /* Monedas */
+
+ for(let i=0;i<platforms.length;i++){
+
+   const p=platforms[i];
+
+   coinsList.push({
+     x:p.x+p.w/2,
+     y:p.y-35,
+     collected:false,
+     spin:0
+   });
+
+   if(i%3===0){
+
+     coinsList.push({
+       x:p.x+25,
+       y:p.y-65,
+       collected:false,
+       spin:0
+     });
+   }
+ }
+
+ /* Checkpoints */
+
+ for(let i=2;i<platforms.length;i+=3){
+
+   const p=platforms[i];
+
+   checkpoints.push({
+     x:p.x+20,
+     y:p.y,
+     active:false
+   });
+ }
+
+ const last=platforms[platforms.length-1];
+
+ goal={
+   x:last.x+last.w-45,
+   y:last.y-110,
+   w:55,
+   h:110
+ };
+
+ player.x=platforms[0].x+50;
+ player.y=platforms[0].y-player.h;
+ player.vx=0;
+ player.vy=0;
+
+ showLevel();
+}
+
+/* =========================
+   TECLADO
+========================= */
+
+addEventListener("keydown",e=>{
+
+ keys[e.key.toLowerCase()]=true;
+
+ if(e.code==="Space"){
+   keys.space=true;
+   e.preventDefault();
+ }
+});
+
+addEventListener("keyup",e=>{
+
+ keys[e.key.toLowerCase()]=false;
+
+ if(e.code==="Space"){
+   keys.space=false;
+ }
+});
+
+/* =========================
+   COLISIÓN
+========================= */
+
+function hit(a,b){
+
+ return(
+   a.x<b.x+b.w &&
+   a.x+a.w>b.x &&
+   a.y<b.y+b.h &&
+   a.y+a.h>b.y
+ );
+}
+
+/* =========================
+   MORIR
+========================= */
+
+function die(){
+
+ if(gameOver||won)return;
+
+ lives--;
+
+ document.getElementById("lives").textContent=lives;
+
+ if(lives<=0){
+
+   gameOver=true;
+
+   document.getElementById("message").style.display="block";
+   document.querySelector("#message h1").textContent="💥 GAME OVER";
+   document.getElementById("finalText").textContent=
+     "Te quedaste sin vidas.";
+
+   document.getElementById("restart").style.display="block";
+
+   return;
+ }
+
+ resetToCheckpoint();
+}
+
+/* =========================
+   CHECKPOINT
+========================= */
+
+let lastCheckpoint=null;
+
+function resetToCheckpoint(){
+
+ if(lastCheckpoint){
+
+   player.x=lastCheckpoint.x;
+   player.y=lastCheckpoint.y-player.h-5;
+
+ }else{
+
+   const p=platforms[0];
+
+   player.x=p.x+40;
+   player.y=p.y-player.h;
+ }
+
+ player.vx=0;
+ player.vy=0;
+}
+
+/* =========================
+   UPDATE
+========================= */
+
+function update(){
+
+ if(gameOver||won)return;
+
+ totalTime+=1/60;
+
+ document.getElementById("time").textContent=Math.floor(totalTime);
+
+ /* Movimiento */
+
+ player.vx=0;
+
+ if(keys.a)player.vx=-SPEED;
+ if(keys.d)player.vx=SPEED;
+
+ /* Salto */
+
+ if(keys.space&&!player.jumpLock&&player.grounded){
+
+   player.vy=JUMP;
+   player.grounded=false;
+   player.jumpLock=true;
+ }
+
+ if(!keys.space){
+   player.jumpLock=false;
+ }
+
+ /* Gravedad */
+
+ player.vy+=GRAVITY;
+
+ const oldY=player.y;
+
+ player.x+=player.vx;
+ player.y+=player.vy;
+
+ player.grounded=false;
+
+ /* Plataformas */
+
+ for(const p of platforms){
+
+   if(
+     player.vy>=0 &&
+     player.x+player.w>p.x &&
+     player.x<p.x+p.w &&
+     oldY+player.h<=p.y &&
+     player.y+player.h>=p.y
+   ){
+
+     player.y=p.y-player.h;
+     player.vy=0;
+     player.grounded=true;
+   }
+ }
+
+ /* Móviles */
+
+ for(const p of movingPlatforms){
+
+   p.x+=p.speed*p.dir;
+
+   if(p.x>p.endX)p.dir=-1;
+   if(p.x<p.startX)p.dir=1;
+
+   if(
+     player.vy>=0 &&
+     player.x+player.w>p.x &&
+     player.x<p.x+p.w &&
+     oldY+player.h<=p.y &&
+     player.y+player.h>=p.y
+   ){
+
+     player.y=p.y-player.h;
+     player.vy=0;
+     player.grounded=true;
+   }
+ }
+
+ /* Trampolines */
+
+ for(const b of bouncePads){
+
+   if(
+     player.x+player.w>b.x &&
+     player.x<b.x+b.w &&
+     player.y+player.h>b.y &&
+     player.y+player.h<b.y+25 &&
+     player.vy>=0
+   ){
+
+     player.vy=-18;
+     player.grounded=false;
+   }
+ }
+
+ /* Lava */
+
+ for(const l of lava){
+
+   if(hit(player,l)){
+     die();
+     return;
+   }
+ }
+
+ /* Caída */
+
+ if(player.y>650){
+
+   die();
+   return;
+ }
+
+ /* Monedas */
+
+ for(const c of coinsList){
+
+   if(c.collected)continue;
+
+   c.spin+=.1;
+
+   const dx=player.x+player.w/2-c.x;
+   const dy=player.y+player.h/2-c.y;
+
+   if(Math.sqrt(dx*dx+dy*dy)<35){
+
+     c.collected=true;
+     coins++;
+
+     document.getElementById("coins").textContent=coins;
+   }
+ }
+
+ /* Checkpoints */
+
+ for(const cp of checkpoints){
+
+   if(
+     player.x>cp.x &&
+     player.x<cp.x+70
+   ){
+
+     cp.active=true;
+
+     lastCheckpoint={
+       x:cp.x,
+       y:cp.y
+     };
+   }
+ }
+
+ /* Meta */
+
+ if(
+   player.x+player.w>goal.x &&
+   player.x<goal.x+goal.w &&
+   player.y<goal.y+goal.h
+ ){
+
+   finishLevel();
+ }
+
+ /* Cámara */
+
+ const targetX=player.x-canvas.width*.35;
+
+ cameraX+=(targetX-cameraX)*.08;
+
+ cameraX=Math.max(0,cameraX);
+}
+
+/* =========================
+   SIGUIENTE NIVEL
+========================= */
+
+function finishLevel(){
+
+ if(currentLevel>=10){
+
+   won=true;
+
+   document.getElementById("message").style.display="block";
+
+   document.querySelector("#message h1").textContent=
+     "🏆 ¡GANASTE TODO! 🏆";
+
+   document.getElementById("finalText").textContent=
+     "Completaste los 10 niveles con "+
+     coins+" monedas en "+
+     Math.floor(totalTime)+" segundos.";
+
+   document.getElementById("restart").style.display="block";
+
+   return;
+ }
+
+ currentLevel++;
+
+ document.getElementById("level").textContent=currentLevel;
+
+ lastCheckpoint=null;
+
+ buildLevel();
+}
+
+/* =========================
+   BANNER
+========================= */
+
+function showLevel(){
+
+ const banner=document.getElementById("levelBanner");
+
+ banner.textContent="⭐ NIVEL "+currentLevel+" ⭐";
+ banner.style.opacity=1;
+
+ setTimeout(()=>{
+   banner.style.opacity=0;
+ },1500);
+}
+
+/* =========================
+   DIBUJAR
+========================= */
+
+function draw(){
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ /* Cielo */
+
+ const gradient=ctx.createLinearGradient(
+   0,0,0,canvas.height
+ );
+
+ gradient.addColorStop(0,"#4db9ff");
+ gradient.addColorStop(1,"#dff8ff");
+
+ ctx.fillStyle=gradient;
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ ctx.save();
+
+ ctx.translate(-cameraX,0);
+
+ /* Nubes */
+
+ ctx.fillStyle="#ffffffaa";
+
+ for(let i=0;i<18;i++){
+
+   const x=i*260;
+   const y=70+(i%4)*45;
+
+   ctx.beginPath();
+   ctx.arc(x,y,30,0,Math.PI*2);
+   ctx.arc(x+35,y-12,38,0,Math.PI*2);
+   ctx.arc(x+75,y,28,0,Math.PI*2);
+   ctx.fill();
+ }
+
+ /* Montañas */
+
+ ctx.fillStyle="#79b96c";
+
+ for(let i=0;i<12;i++){
+
+   const x=i*350;
+
+   ctx.beginPath();
+   ctx.moveTo(x,500);
+   ctx.lineTo(x+170,280);
+   ctx.lineTo(x+340,500);
+   ctx.fill();
+ }
+
+ /* Lava */
+
+ for(const l of lava){
+
+   ctx.fillStyle="#ff2600";
+   ctx.fillRect(l.x,l.y,l.w,l.h);
+
+   ctx.fillStyle="#ffb300";
+
+   for(let x=l.x;x<l.x+l.w;x+=25){
+
+     ctx.fillRect(
+       x,
+       l.y+5+Math.sin(Date.now()/150+x)*4,
+       16,
+       7
+     );
+   }
+ }
+
+ /* Plataformas */
+
+ for(const p of platforms){
+
+   drawBlock(p.x,p.y,p.w,p.h,"#777");
+
+   ctx.fillStyle="#31dc48";
+   ctx.fillRect(p.x,p.y,p.w,9);
+ }
+
+ /* Plataformas móviles */
+
+ for(const p of movingPlatforms){
+
+   drawBlock(p.x,p.y,p.w,p.h,"#8e44ad");
+
+   ctx.fillStyle="#e1a7ff";
+   ctx.fillRect(p.x,p.y,p.w,5);
+ }
+
+ /* Trampolines */
+
+ for(const b of bouncePads){
+
+   ctx.fillStyle="#00aaff";
+   ctx.fillRect(b.x,b.y,b.w,b.h);
+
+   ctx.fillStyle="white";
+   ctx.font="bold 15px Arial";
+   ctx.fillText("↑",b.x+16,b.y+12);
+ }
+
+ /* Checkpoints */
+
+ for(const cp of checkpoints){
+
+   ctx.fillStyle="#333";
+   ctx.fillRect(cp.x,cp.y-70,7,70);
+
+   ctx.fillStyle=cp.active?"#00ff66":"#ffdd00";
+
+   ctx.beginPath();
+   ctx.moveTo(cp.x+7,cp.y-70);
+   ctx.lineTo(cp.x+55,cp.y-53);
+   ctx.lineTo(cp.x+7,cp.y-35);
+   ctx.fill();
+ }
+
+ /* Monedas */
+
+ for(const c of coinsList){
+
+   if(c.collected)continue;
+
+   const scale=.7+Math.abs(Math.sin(c.spin))*.3;
+
+   ctx.save();
+   ctx.translate(c.x,c.y);
+   ctx.scale(scale,1);
+
+   ctx.fillStyle="#ffd700";
+   ctx.beginPath();
+   ctx.arc(0,0,14,0,Math.PI*2);
+   ctx.fill();
+
+   ctx.strokeStyle="#fff";
+   ctx.lineWidth=3;
+   ctx.stroke();
+
+   ctx.restore();
+ }
+
+ /* Meta */
+
+ ctx.fillStyle="#333";
+ ctx.fillRect(goal.x+5,goal.y,8,110);
+
+ ctx.fillStyle="#00ff55";
+
+ ctx.beginPath();
+ ctx.moveTo(goal.x+13,goal.y);
+ ctx.lineTo(goal.x+70,goal.y+20);
+ ctx.lineTo(goal.x+13,goal.y+40);
+ ctx.fill();
+
+ ctx.fillStyle="#fff";
+ ctx.font="bold 22px Arial";
+ ctx.fillText("META",goal.x-5,goal.y-15);
+
+ /* Jugador */
+
+ drawPlayer();
+
+ ctx.restore();
+}
+
+/* =========================
+   BLOQUE
+========================= */
+
+function drawBlock(x,y,w,h,color){
+
+ ctx.fillStyle=color;
+ ctx.fillRect(x,y,w,h);
+
+ ctx.strokeStyle="#333";
+ ctx.lineWidth=2;
+ ctx.strokeRect(x,y,w,h);
+
+ ctx.fillStyle="#ffffff18";
+
+ for(let xx=x;xx<x+w;xx+=25){
+   for(let yy=y+10;yy<y+h;yy+=25){
+     ctx.fillRect(xx,yy,12,12);
+   }
+ }
+}
+
+/* =========================
+   PERSONAJE
+========================= */
+
+function drawPlayer(){
+
+ const x=player.x;
+ const y=player.y;
+
+ /* Sombra */
+
+ ctx.fillStyle="#0004";
+ ctx.fillRect(x+3,y+player.h,x+28-x,7);
+
+ /* Piernas */
+
+ ctx.fillStyle="#222";
+
+ ctx.fillRect(x+5,y+37,10,18);
+ ctx.fillRect(x+22,y+37,10,18);
+
+ /* Cuerpo */
+
+ ctx.fillStyle="#1677d2";
+ ctx.fillRect(x+3,y+18,31,25);
+
+ /* Brazos */
+
+ ctx.fillStyle="#f2b27b";
+
+ ctx.fillRect(x-7,y+20,10,22);
+ ctx.fillRect(x+34,y+20,10,22);
+
+ /* Cabeza */
+
+ ctx.beginPath();
+ ctx.arc(x+19,y+10,15,0,Math.PI*2);
+
+ ctx.fillStyle="#f2b27b";
+ ctx.fill();
+
+ /* Pelo */
+
+ ctx.fillStyle="#512d18";
+ ctx.fillRect(x+5,y-5,28,8);
+
+ /* Ojos */
+
+ ctx.fillStyle="#222";
+
+ ctx.beginPath();
+ ctx.arc(x+13,y+10,2,0,Math.PI*2);
+ ctx.arc(x+25,y+10,2,0,Math.PI*2);
+ ctx.fill();
+}
+
+/* =========================
+   BOTONES
+========================= */
+
+document.getElementById("full").onclick=()=>{
+
+ if(!document.fullscreenElement){
+   document.documentElement.requestFullscreen();
+ }else{
+   document.exitFullscreen();
+ }
+};
+
+function restart(){
+
+ location.reload();
+
+}
+
+document.getElementById("restart").onclick=restart;
+document.getElementById("restartTop").onclick=restart;
+
+/* =========================
+   LOOP
+========================= */
+
+function loop(){
+
+ update();
+ draw();
+
+ requestAnimationFrame(loop);
+}
+
+/* =========================
+   INICIO
+========================= */
+
+buildLevel();
+loop();
+
+</script>
+
+</body>
+</html>
